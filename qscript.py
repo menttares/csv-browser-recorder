@@ -1,14 +1,20 @@
-import json;
-import shutil;
-import random;
-import time;
-from pathlib import Path;
+import json
+import logging
+import random
+import shutil
+import time
+from pathlib import Path
+from uuid import uuid4
 
-from playwright.sync_api import sync_playwright;
+from playwright.sync_api import sync_playwright
+from werkzeug.utils import secure_filename
+
+
+logger = logging.getLogger(__name__)
 
 
 # Папка для сохранения видео
-PATH_TO_VIDEO_FOLDER = "./video";
+PATH_TO_VIDEO_FOLDER = Path(__file__).resolve().parent / "video"
 
 
 def CaptureVideo_Magento(
@@ -25,6 +31,7 @@ def CaptureVideo_Magento(
 
     video_folder = Path(PATH_TO_VIDEO_FOLDER)
     video_folder.mkdir(parents=True, exist_ok=True)
+    recorded_video = None
 
     try:
         with sync_playwright() as playwright:
@@ -45,6 +52,8 @@ def CaptureVideo_Magento(
                 )
 
                 try:
+                    page = None
+
                     # Внедряем собственный курсор и стили
                     context.add_init_script(
                         script=load_cursor_script()
@@ -54,7 +63,7 @@ def CaptureVideo_Magento(
                     page = context.new_page()
 
                     # Открываем сайт
-                    print(f"Открываем: {url}")
+                    logger.info("Открываем: %s", url)
 
                     page.goto(
                         url,
@@ -112,25 +121,17 @@ def CaptureVideo_Magento(
                     )
 
                     # Нажимаем первую ссылку
-                    smooth_move(
-                        page,
-                        start_x= 0,
-                        start_y= 0,
-                        end_x=x,
-                        end_y=y,
-                        click_at_end=True
-                    )
-
-                    # Проверка перехода и перемещаем в центр страницы
                     with page.expect_navigation(
                         wait_until="domcontentloaded",
                         timeout=30000
                     ):
                         smooth_move(
                             page,
+                            start_x=0,
+                            start_y=0,
                             end_x=x,
                             end_y=y,
-                            click_at_end=False
+                            click_at_end=True
                         )
 
                     # Временная пауза 
@@ -141,14 +142,19 @@ def CaptureVideo_Magento(
                     context.close()
 
                     # Получаем путь к видео
-                    recorded_video = page.video.path()
+                    if page is not None and page.video is not None:
+                        recorded_video = Path(page.video.path())
 
             finally:
                 # Закрываем браузер до остановки Playwright
                 browser.close()
 
-        # Формируем итоговое имя видео
-        output_path = video_folder / f"{company_name}.webm"
+        if recorded_video is None:
+            raise RuntimeError("Playwright did not produce a video")
+
+        # Уникальное имя не позволяет повторным запускам перезаписывать видео.
+        safe_name = secure_filename(company_name) or "company"
+        output_path = video_folder / f"{safe_name}_{uuid4().hex}.webm"
 
         # Перемещаем и переименовываем видео
         shutil.move(
@@ -158,9 +164,13 @@ def CaptureVideo_Magento(
 
         return str(output_path.resolve())
 
-    except Exception as error:
-        print(f"Ошибка при обработке {company_name}: {error}")
+    except Exception:
+        logger.exception("Ошибка при обработке %s", company_name)
         return None
+
+
+# Preferred Python-style name; keep the original alias for compatibility.
+capture_video_magento = CaptureVideo_Magento
 
 
 
