@@ -1,10 +1,15 @@
 import json;
+import logging;
 import shutil;
 import random;
 import time;
 from pathlib import Path;
 
 from playwright.sync_api import sync_playwright;
+from werkzeug.utils import secure_filename;
+
+
+logger = logging.getLogger(__name__)
 
 
 # Папка для сохранения видео
@@ -45,6 +50,8 @@ def CaptureVideo_Magento(
                 )
 
                 try:
+                    page = None
+
                     # Внедряем собственный курсор и стили
                     context.add_init_script(
                         script=load_cursor_script()
@@ -54,7 +61,7 @@ def CaptureVideo_Magento(
                     page = context.new_page()
 
                     # Открываем сайт
-                    print(f"Открываем: {url}")
+                    logger.info("Открываем: %s", url)
 
                     page.goto(
                         url,
@@ -112,25 +119,17 @@ def CaptureVideo_Magento(
                     )
 
                     # Нажимаем первую ссылку
-                    smooth_move(
-                        page,
-                        start_x= 0,
-                        start_y= 0,
-                        end_x=x,
-                        end_y=y,
-                        click_at_end=True
-                    )
-
-                    # Проверка перехода и перемещаем в центр страницы
                     with page.expect_navigation(
                         wait_until="domcontentloaded",
                         timeout=30000
                     ):
                         smooth_move(
                             page,
+                            start_x=0,
+                            start_y=0,
                             end_x=x,
                             end_y=y,
-                            click_at_end=False
+                            click_at_end=True
                         )
 
                     # Временная пауза 
@@ -141,14 +140,16 @@ def CaptureVideo_Magento(
                     context.close()
 
                     # Получаем путь к видео
-                    recorded_video = page.video.path()
+                    if page is not None:
+                        recorded_video = page.video.path()
 
             finally:
                 # Закрываем браузер до остановки Playwright
                 browser.close()
 
         # Формируем итоговое имя видео
-        output_path = video_folder / f"{company_name}.webm"
+        safe_name = secure_filename(company_name) or "company"
+        output_path = video_folder / f"{safe_name}.webm"
 
         # Перемещаем и переименовываем видео
         shutil.move(
@@ -158,8 +159,8 @@ def CaptureVideo_Magento(
 
         return str(output_path.resolve())
 
-    except Exception as error:
-        print(f"Ошибка при обработке {company_name}: {error}")
+    except Exception:
+        logger.exception("Ошибка при обработке %s", company_name)
         return None
 
 
