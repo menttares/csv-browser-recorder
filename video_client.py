@@ -1,10 +1,19 @@
 
 from pathlib import Path
+from typing import Any
 
 import requests
 
 
-def UploadVideo(server_url: str, video_path: str, company_name: str) -> str:
+def _response_json(response: requests.Response) -> dict[str, Any]:
+    response.raise_for_status()
+    payload = response.json()
+    if not isinstance(payload, dict):
+        raise ValueError("Server returned an invalid JSON response")
+    return payload
+
+
+def upload_video(server_url: str, video_path: str, company_name: str) -> str:
     """Upload a video file and return its URL."""
 
     endpoint = f"{server_url.rstrip('/')}/upload"
@@ -22,11 +31,11 @@ def UploadVideo(server_url: str, video_path: str, company_name: str) -> str:
             timeout=(5, 120),
         )
 
-    response.raise_for_status()
-    return response.json()["video_url"]
+    payload = _response_json(response)
+    return str(payload["video_url"])
 
 
-def GetVideoURL(server_url: str, company_name: str) -> str:
+def get_video_url(server_url: str, company_name: str) -> str:
     """Get the video URL for the specified company."""
 
     endpoint = f"{server_url.rstrip('/')}/get_video_url"
@@ -39,5 +48,10 @@ def GetVideoURL(server_url: str, company_name: str) -> str:
         timeout=10,
     )
 
-    response.raise_for_status()
-    return response.json()["video_url"]
+    payload = _response_json(response)
+    return str(payload["video_url"])
+
+
+# Compatibility aliases for existing callers.
+UploadVideo = upload_video
+GetVideoURL = get_video_url

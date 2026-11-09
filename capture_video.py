@@ -7,7 +7,7 @@ from pathlib import Path
 import qscript
 
 
-CSV_FILE = Path(__file__).parent / "input.csv";
+CSV_FILE = Path(__file__).resolve().parent / "input.csv"
 
 REQUIRED_COLUMNS = (
     "URL",
@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 def read_csv_file(file_path: Path) -> list[dict]:
     #читает CSV-файл и возвращает список строк
 
-    with open(file_path, "r", encoding="utf-8", newline="") as file:
+    with file_path.open("r", encoding="utf-8", newline="") as file:
         reader = csv.DictReader(
             file,
             delimiter=";",
@@ -47,7 +47,7 @@ def read_csv_file(file_path: Path) -> list[dict]:
                 f"{', '.join(missing_columns)}"
             )
 
-        return list(reader);
+        return list(reader)
 
 
 
@@ -88,11 +88,11 @@ def run_capture(
 
     #Запускает обработку всех записей CSV
 
-    rows = read_csv_file(CSV_FILE);
+    rows = read_csv_file(CSV_FILE)
 
     if not rows:
         logger.info("CSV-файл не содержит данных.")
-        return;
+        return
 
     for index, row in enumerate(rows, start=1 ):
 
@@ -117,7 +117,7 @@ def run_capture(
             company_name
         )
         try:
-            video_path = qscript.CaptureVideo_Magento(
+            video_path = qscript.capture_video_magento(
                 url=row["URL"],
                 company_name=company_name,
                 language=row["Language"],
@@ -149,9 +149,9 @@ def run_capture(
 
         try:
             # Отложенный импорт: requests не нужен без --server.
-            from video_client import UploadVideo
+            from video_client import upload_video
 
-            video_url = UploadVideo(
+            video_url = upload_video(
                 server_url=server_url,
                 video_path=video_path,
                 company_name=company_name
@@ -213,4 +213,4 @@ if __name__ == "__main__":
         format="%(levelname)s: %(message)s"
     )
 
-    main();
+    main()

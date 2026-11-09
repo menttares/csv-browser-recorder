@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 from uuid import uuid4
 
-from flask import Flask, jsonify, request, send_from_directory
+from flask import Blueprint, Flask, current_app, jsonify, request, send_from_directory
 from werkzeug.utils import secure_filename
 
 if __package__:
@@ -26,20 +26,33 @@ else:
 
 BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_FOLDER = BASE_DIR / "uploads"
+routes = Blueprint("video_service", __name__)
 
-app = Flask(__name__)
-app.teardown_appcontext(close_db)
+def create_app(test_config: dict[str, object] | None = None) -> Flask:
+    app = Flask(__name__)
+    app.config.from_mapping(
+        DATABASE=BASE_DIR / "videos.db",
+        UPLOAD_FOLDER=UPLOAD_FOLDER,
+        MAX_CONTENT_LENGTH=500 * 1024 * 1024,
+    )
+    if test_config:
+        app.config.update(test_config)
 
-UPLOAD_FOLDER.mkdir(parents=True, exist_ok=True)
-init_db()
+    upload_folder = Path(app.config["UPLOAD_FOLDER"])
+    upload_folder.mkdir(parents=True, exist_ok=True)
+    app.register_blueprint(routes)
+    app.teardown_appcontext(close_db)
+    with app.app_context():
+        init_db(upload_folder=upload_folder)
+    return app
 
 
-@app.get("/")
+@routes.get("/")
 def index():
     return {"status": "ok", "service": "video-service"}
 
 
-@app.post("/upload")
+@routes.post("/upload")
 def upload_video():
     video = request.files.get("file")
     company_name = request.form.get("company_name", "").strip()
@@ -57,7 +70,8 @@ def upload_video():
 
     safe_name = secure_filename(company_name) or "company"
     filename = f"{safe_name}_{uuid4().hex}.webm"
-    file_path = UPLOAD_FOLDER / filename
+    upload_folder = Path(current_app.config["UPLOAD_FOLDER"])
+    file_path = upload_folder / filename
     video_url = f"{request.host_url}media/{filename}"
 
 
@@ -72,7 +86,7 @@ def upload_video():
         )
 
     except (OSError, DatabaseError):
-        app.logger.exception("Upload failed")
+        current_app.logger.exception("Upload failed")
 
         try:
             file_path.unlink(missing_ok=True)
@@ -86,7 +100,7 @@ def upload_video():
     if previous_path:
         old_path = Path(previous_path)
 
-        if old_path.resolve().parent == UPLOAD_FOLDER.resolve():
+        if old_path.resolve().parent == upload_folder.resolve():
             try:
                 old_path.unlink(missing_ok=True)
             except OSError:
@@ -101,7 +115,7 @@ def upload_video():
 
 
 
-@app.get("/get_video_url")
+@routes.get("/get_video_url")
 def get_video_url():
     company_name = request.args.get(
         "company_name", ""
@@ -116,7 +130,7 @@ def get_video_url():
         video = get_video_by_company(company_name)
 
     except DatabaseError:
-        app.logger.exception("Failed to retrieve video")
+        current_app.logger.exception("Failed to retrieve video")
         return jsonify({
             "error": "Database operation failed"
         }), 500
@@ -130,14 +144,16 @@ def get_video_url():
 
 
 
-@app.get("/media/<filename>")
+@routes.get("/media/<filename>")
 def get_media(filename):
     return send_from_directory(
-        UPLOAD_FOLDER,
+        current_app.config["UPLOAD_FOLDER"],
         filename,
         mimetype="video/webm"
     )
 
+
+app = create_app()
 
 
 if __name__ == "__main__":

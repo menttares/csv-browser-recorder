@@ -1,10 +1,11 @@
 
 import logging
 import sqlite3
+from contextlib import closing
 from pathlib import Path
 
-from flask import g
-from urllib.parse import urlsplit, unquote
+from flask import current_app, g
+from urllib.parse import unquote, urlsplit
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -17,9 +18,25 @@ class DatabaseError(Exception):
     pass
 
 
+def _database_path() -> Path:
+    try:
+        return Path(current_app.config.get("DATABASE", DATABASE_PATH))
+    except RuntimeError:
+        return DATABASE_PATH
+
+
+def _upload_folder() -> Path:
+    try:
+        return Path(current_app.config.get("UPLOAD_FOLDER", BASE_DIR / "uploads"))
+    except RuntimeError:
+        return BASE_DIR / "uploads"
+
+
 def get_db():
     if "db" not in g:
-        g.db = sqlite3.connect(DATABASE_PATH, timeout=10)
+        database_path = _database_path()
+        database_path.parent.mkdir(parents=True, exist_ok=True)
+        g.db = sqlite3.connect(database_path, timeout=10)
         g.db.row_factory = sqlite3.Row
 
     return g.db
@@ -32,27 +49,35 @@ def close_db(error=None):
         db.close()
 
 
-def init_db():
-    with sqlite3.connect(DATABASE_PATH) as db:
-        db.execute("PRAGMA journal_mode=WAL")
+def init_db(database_path: str | Path | None = None,
+            upload_folder: str | Path | None = None) -> int:
+    path = Path(database_path) if database_path is not None else _database_path()
+    uploads = Path(upload_folder) if upload_folder is not None else _upload_folder()
+    path.parent.mkdir(parents=True, exist_ok=True)
 
-        db.execute("""
-            CREATE TABLE IF NOT EXISTS videos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                company_name TEXT NOT NULL UNIQUE,
-                file_path TEXT NOT NULL,
-                video_url TEXT NOT NULL,
-                created_at TEXT NOT NULL DEFAULT (datetime('now')),
-                updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    with closing(sqlite3.connect(path)) as db:
+        with db:
+            db.execute("PRAGMA journal_mode=WAL")
+
+            db.execute("""
+                CREATE TABLE IF NOT EXISTS videos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    company_name TEXT NOT NULL UNIQUE,
+                    file_path TEXT NOT NULL,
+                    video_url TEXT NOT NULL,
+                    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+                )
+            """)
+
+            removed = cleanup_invalid_videos(db, uploads)
+
+            logger.info(
+                "Database initialized. Invalid records removed: %s",
+                removed
             )
-        """)
 
-        removed = cleanup_invalid_videos(db)
-
-        logger.info(
-            "Database initialized. Invalid records removed: %s",
-            removed
-        )
+    return removed
 
 
 def save_video(company_name: str, file_path: str, video_url: str):
@@ -113,13 +138,16 @@ def get_video_by_company(company_name: str):
 
 
 
-def cleanup_invalid_videos(db: sqlite3.Connection) -> int:
+def cleanup_invalid_videos(
+    db: sqlite3.Connection,
+    upload_folder: str | Path | None = None,
+) -> int:
     records = db.execute(
         "SELECT id, file_path, video_url FROM videos"
     ).fetchall()
 
     invalid_ids = []
-    upload_folder = (BASE_DIR / "uploads").resolve()
+    upload_folder = Path(upload_folder or _upload_folder()).resolve()
 
     for record_id, file_path, video_url in records:
         path = Path(file_path)

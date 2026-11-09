@@ -1,19 +1,20 @@
-import json;
-import logging;
-import shutil;
-import random;
-import time;
-from pathlib import Path;
+import json
+import logging
+import random
+import shutil
+import time
+from pathlib import Path
+from uuid import uuid4
 
-from playwright.sync_api import sync_playwright;
-from werkzeug.utils import secure_filename;
+from playwright.sync_api import sync_playwright
+from werkzeug.utils import secure_filename
 
 
 logger = logging.getLogger(__name__)
 
 
 # Папка для сохранения видео
-PATH_TO_VIDEO_FOLDER = "./video";
+PATH_TO_VIDEO_FOLDER = Path(__file__).resolve().parent / "video"
 
 
 def CaptureVideo_Magento(
@@ -30,6 +31,7 @@ def CaptureVideo_Magento(
 
     video_folder = Path(PATH_TO_VIDEO_FOLDER)
     video_folder.mkdir(parents=True, exist_ok=True)
+    recorded_video = None
 
     try:
         with sync_playwright() as playwright:
@@ -140,16 +142,19 @@ def CaptureVideo_Magento(
                     context.close()
 
                     # Получаем путь к видео
-                    if page is not None:
-                        recorded_video = page.video.path()
+                    if page is not None and page.video is not None:
+                        recorded_video = Path(page.video.path())
 
             finally:
                 # Закрываем браузер до остановки Playwright
                 browser.close()
 
-        # Формируем итоговое имя видео
+        if recorded_video is None:
+            raise RuntimeError("Playwright did not produce a video")
+
+        # Уникальное имя не позволяет повторным запускам перезаписывать видео.
         safe_name = secure_filename(company_name) or "company"
-        output_path = video_folder / f"{safe_name}.webm"
+        output_path = video_folder / f"{safe_name}_{uuid4().hex}.webm"
 
         # Перемещаем и переименовываем видео
         shutil.move(
@@ -162,6 +167,10 @@ def CaptureVideo_Magento(
     except Exception:
         logger.exception("Ошибка при обработке %s", company_name)
         return None
+
+
+# Preferred Python-style name; keep the original alias for compatibility.
+capture_video_magento = CaptureVideo_Magento
 
 
 
