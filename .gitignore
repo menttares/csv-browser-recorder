@@ -16,10 +16,8 @@ env/
 .env
 .env.*
 
-
 video/
 
-.pytest_cache/
 .mypy_cache/
 .ruff_cache/
 
@@ -28,5 +26,3 @@ uploads/
 videos.db
 videos.db-shm
 videos.db-wal
-
-tests

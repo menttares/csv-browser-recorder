@@ -3,6 +3,7 @@ import csv
 import logging
 import time
 from pathlib import Path
+from typing import Optional
 
 import qscript
 
@@ -82,7 +83,7 @@ def preview_video(video_url: str, view_seconds: int) -> None:
 
 
 def run_capture(
-    server_url: str | None = None,
+    server_url: Optional[str] = None,
     view_seconds: int = 5
     ) -> None:
 

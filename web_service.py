@@ -1,42 +1,34 @@
 
 import os
 from pathlib import Path
+from typing import Optional
 from uuid import uuid4
 
 from flask import Blueprint, Flask, current_app, jsonify, request, send_from_directory
 from werkzeug.utils import secure_filename
 
-if __package__:
-    from .database import (
-        DatabaseError,
-        close_db,
-        get_video_by_company,
-        init_db,
-        save_video,
-    )
-else:
-    from database import (
-        DatabaseError,
-        close_db,
-        get_video_by_company,
-        init_db,
-        save_video,
-    )
+from database import (
+    DatabaseError,
+    close_db,
+    get_video_by_company,
+    init_db,
+    save_video,
+)
 
 
 BASE_DIR = Path(__file__).resolve().parent
 UPLOAD_FOLDER = BASE_DIR / "uploads"
 routes = Blueprint("video_service", __name__)
 
-def create_app(test_config: dict[str, object] | None = None) -> Flask:
+def create_app(config: Optional[dict[str, object]] = None) -> Flask:
     app = Flask(__name__)
     app.config.from_mapping(
         DATABASE=BASE_DIR / "videos.db",
         UPLOAD_FOLDER=UPLOAD_FOLDER,
         MAX_CONTENT_LENGTH=500 * 1024 * 1024,
     )
-    if test_config:
-        app.config.update(test_config)
+    if config:
+        app.config.update(config)
 
     upload_folder = Path(app.config["UPLOAD_FOLDER"])
     upload_folder.mkdir(parents=True, exist_ok=True)

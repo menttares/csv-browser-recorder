@@ -3,6 +3,7 @@ import logging
 import sqlite3
 from contextlib import closing
 from pathlib import Path
+from typing import Optional, Union
 
 from flask import current_app, g
 from urllib.parse import unquote, urlsplit
@@ -49,8 +50,10 @@ def close_db(error=None):
         db.close()
 
 
-def init_db(database_path: str | Path | None = None,
-            upload_folder: str | Path | None = None) -> int:
+def init_db(
+    database_path: Optional[Union[str, Path]] = None,
+    upload_folder: Optional[Union[str, Path]] = None,
+) -> int:
     path = Path(database_path) if database_path is not None else _database_path()
     uploads = Path(upload_folder) if upload_folder is not None else _upload_folder()
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -140,7 +143,7 @@ def get_video_by_company(company_name: str):
 
 def cleanup_invalid_videos(
     db: sqlite3.Connection,
-    upload_folder: str | Path | None = None,
+    upload_folder: Optional[Union[str, Path]] = None,
 ) -> int:
     records = db.execute(
         "SELECT id, file_path, video_url FROM videos"

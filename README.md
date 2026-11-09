@@ -1,6 +1,6 @@
 # CSV Browser Recorder
 
-Python browser automation using Playwright. The project records browser sessions
+Python 3.9+ browser automation using Playwright. The project records browser sessions
 from `input.csv`, optionally uploads the resulting WebM files to the Flask
 service, and stores the latest video URL for each company in SQLite.
 
@@ -19,7 +19,7 @@ python -m playwright install chromium
 Start the upload service in one terminal:
 
 ```bash
-python -m web_service.web_service
+python web_service.py
 ```
 
 Run the CSV recorder in another terminal:
